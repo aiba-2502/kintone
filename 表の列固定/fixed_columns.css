@@ -1,0 +1,21 @@
+/* テーブルヘッダーの固定部分 */
+.subtable-gaia .subtable-header-gaia th {
+    top: 0; /* 上部からの位置を固定 */
+    background-color: #FFF; /* 背景色を白に設定 */
+    z-index: 2; /* 前面に表示 */
+}
+
+/* テーブルデータの固定部分 */
+.subtable-gaia tbody tr td {
+    z-index: 1; /* データセルを背景より前面に表示 */
+}
+
+/* 偶数行の背景色を設定 */
+.subtable-gaia tbody tr:nth-child(2n) td:nth-child(-n+3) {
+    background-color: #FFF; /* 偶数行は白 */
+}
+
+/* 奇数行の背景色を設定 */
+.subtable-gaia tbody tr:nth-child(2n+1) td:nth-child(-n+3) {
+    background-color: #F5F5F5; /* 奇数行は薄いグレー */
+}
