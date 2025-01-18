@@ -1,88 +1,59 @@
-(() => {
+(function() {
     'use strict';
 
-    // CSVダウンロードのメイン処理
-    const dlCsv = async () => {
+    // 対象画面のイベントに処理をバインド
+    kintone.events.on('app.record.create.show', function(event) {
+        // ボタンを作成してスペースに追加
+        var spaceElement = kintone.app.record.getSpaceElement('csv_output');
+        if (!spaceElement) return;
 
-        // CSVヘッダーの生成
-        const setHeaderData = () => {
-            return HEADER.map(escapeCsvValue).join(',') + '\r\n';
-        };
+        var button = document.createElement('button');
+        button.textContent = 'CSV出力※作成中';
+        button.id = 'csv-output-button';
+        spaceElement.appendChild(button);
 
-        // レコードデータをCSV形式に変換
-        const recordToCsvData = records => {
-            return records.map(record => {
-                return HEADER.map(fieldCode => {
-                    const value = record[fieldCode]?.value || '';
-                    return escapeCsvValue(value);
-                }).join(',');
-            }).join('\r\n') + '\r\n';
-        };
+        // ボタンクリック時の処理
+        button.addEventListener('click', function() {
+            // 診療領収書（アプリID: 64）と患者マスタ（アプリID: 9）からデータを取得
+            Promise.all([
+                kintone.api(kintone.api.url('/k/v1/records', true), 'GET', {
+                    app: 64,
+                    fields: ['宛先', '発行日', '領収金額', '領収書番号', '消費税']
+                }),
+                kintone.api(kintone.api.url('/k/v1/records', true), 'GET', {
+                    app: 9,
+                    fields: ['患者電話番号']
+                })
+            ]).then(function([receiptData, patientData]) {
+                // CSVデータ作成
+                var csvData = '宛先,患者電話番号,発行日,領収金額,領収書番号,消費税\n';
 
-        // CSV用に値をエスケープ
-        const escapeCsvValue = value => {
-            if (typeof value === 'string') {
-                return `"${value.replace(/"/g, '""')}"`; // ダブルクオートをエスケープ
-            }
-            if (typeof value === 'object') {
-                return JSON.stringify(value); // オブジェクトを文字列化
-            }
-            return value;
-        };
+                receiptData.records.forEach(function(receiptRecord, index) {
+                    var patientRecord = patientData.records[index] || {}; // 患者データの対応付け（単純な例）
 
-        // CSV用のフィールドコード
-        const HEADER = ['日付', '作成者', '文字列__複数行', '文字列__複数行__0'];
+                    csvData += [
+                        receiptRecord['宛先'] ? receiptRecord['宛先'].value : '',
+                        patientRecord['患者電話番号'] ? patientRecord['患者電話番号'].value : '',
+                        receiptRecord['発行日'] ? receiptRecord['発行日'].value : '',
+                        receiptRecord['領収金額'] ? receiptRecord['領収金額'].value : '',
+                        receiptRecord['領収書番号'] ? receiptRecord['領収書番号'].value : '',
+                        receiptRecord['消費税'] ? Math.floor(parseFloat(receiptRecord['消費税'].value)) : ''
+                    ].join(',') + '\n';
+                });
 
-        // レコードデータの取得
-        const param_get = {
-            app: kintone.app.getId(),
-        };
-        const obj_get = await kintone.api('/k/v1/records', 'GET', param_get);
-        const targetRecords = obj_get.records;
-
-        // レコードが存在すればCSVを生成
-        if (targetRecords.length > 0) {
-            const csvContent = setHeaderData() + recordToCsvData(targetRecords);
-
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-
-            // CSVファイルをダウンロード
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'export.csv';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(url);
-        }
-    };
-
-    // レコード作成・編集画面表示時にボタンを追加
-    kintone.events.on([
-        'app.record.create.show',
-        'mobile.app.record.create.show',
-        'app.record.edit.show',
-        'mobile.app.record.edit.show'
-    ], event => {
-        // フィールドスペース要素を取得
-        const spaceElement = kintone.app.record.getSpaceElement('CSV_output');
-
-        if (spaceElement) {
-            // ボタンを作成
-            const btn = document.createElement('button');
-            btn.textContent = 'CSV出力';
-            btn.style.margin = '10px';
-            btn.style.padding = '5px';
-            btn.style.borderRadius = '10px';
-            btn.style.cursor = 'pointer';
-            btn.onclick = dlCsv;
-
-            // スペース要素にボタンを追加
-            spaceElement.appendChild(btn);
-        } else {
-            console.warn('指定したフィールドコードが見つかりませんでした: CSV_output');
-        }
+                // CSVファイルをダウンロード
+                var blob = new Blob([csvData], { type: 'text/csv' });
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'export.csv';
+                a.click();
+                URL.revokeObjectURL(url);
+            }).catch(function(error) {
+                console.error('データ取得エラー:', error);
+                alert('データの取得中にエラーが発生しました。');
+            });
+        });
 
         return event;
     });
